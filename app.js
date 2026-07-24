@@ -74,6 +74,12 @@
       "sync.success": "Ligado! A sincronizar…",
       "sync.error.fields": "Preenche pelo menos o repositório e o token.",
       "sync.error.generic": "Não consegui ligar ao GitHub. Confirma o repositório, o ramo e o token.",
+      "sync.error.timeout": "O GitHub demorou demasiado tempo a responder (timeout). Verifica a tua ligação e tenta outra vez.",
+      "sync.error.network": "Não consegui sequer contactar o GitHub — verifica a tua ligação à internet.",
+      "sync.error.badtoken": "O GitHub recusou o token (credenciais inválidas). Confirma se o copiaste por inteiro e se ainda não expirou.",
+      "sync.error.forbidden": "O token não tem permissão para escrever neste repositório. Confirma que o token tem \"Contents: Read and write\" ativado para este repositório.",
+      "sync.error.notfound": "Não encontrei esse repositório (ou o token não tem acesso a ele). Confirma o \"utilizador/repo\".",
+      "sync.error.branch": (branch) => `Não encontrei o ramo "${branch || "main"}" nesse repositório. Confirma o nome do ramo (em muitos repositórios mais antigos é "master").`,
       "sync.help": "Como criar o token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → New token. Escolhe só este repositório e a permissão \"Contents: Read and write\".",
     },
     en: {
@@ -135,6 +141,12 @@
       "sync.success": "Connected! Syncing…",
       "sync.error.fields": "Fill in at least the repository and the token.",
       "sync.error.generic": "Couldn't reach GitHub. Check the repository, branch and token.",
+      "sync.error.timeout": "GitHub took too long to respond (timeout). Check your connection and try again.",
+      "sync.error.network": "Couldn't even reach GitHub — check your internet connection.",
+      "sync.error.badtoken": "GitHub rejected the token (invalid credentials). Check you copied it in full and it hasn't expired.",
+      "sync.error.forbidden": "The token doesn't have permission to write to this repository. Check it has \"Contents: Read and write\" enabled for this repo.",
+      "sync.error.notfound": "Couldn't find that repository (or the token can't access it). Check the \"owner/repo\".",
+      "sync.error.branch": (branch) => `Couldn't find the branch "${branch || "main"}" in that repository. Check the branch name (many older repos use "master").`,
       "sync.help": "How to get a token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → New token. Scope it to this one repository only, with \"Contents: Read and write\".",
     },
   };
@@ -210,6 +222,18 @@
       .replace(/(^-|-$)/g, "") || ("leitor-" + Date.now());
   }
 
+  // Accepts "owner/repo", a full "https://github.com/owner/repo(.git)"
+  // URL, or the same with stray slashes/whitespace — people paste all sorts.
+  function parseRepoInput(raw) {
+    let s = (raw || "").trim();
+    s = s.replace(/^https?:\/\/(www\.)?github\.com\//i, "");
+    s = s.replace(/\.git$/i, "");
+    s = s.replace(/^\/+|\/+$/g, "");
+    const parts = s.split("/").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return null;
+    return { owner: parts[0], repo: parts[1] };
+  }
+
   /* ---------------- GitHub Contents API ---------------- */
   function b64EncodeUnicode(str) {
     return btoa(unescape(encodeURIComponent(str)));
@@ -222,15 +246,50 @@
     return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${DATA_PATH}`;
   }
 
+  // Plain fetch() can hang far longer than feels reasonable on a flaky
+  // connection or a blocked host — abort it ourselves so the UI never
+  // sits on "a sincronizar…" forever.
+  const REQUEST_TIMEOUT_MS = 12000;
+  async function fetchWithTimeout(url, options) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+      if (err.name === "AbortError") {
+        throw new Error("timeout");
+      }
+      throw new Error("network");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Turns a raw error (thrown above, or a GitHub API message) into a short,
+  // actionable sentence instead of a generic "something went wrong".
+  function friendlyGithubError(err, cfg) {
+    const msg = (err && err.message) || "";
+    if (msg === "timeout") return t("sync.error.timeout");
+    if (msg === "network") return t("sync.error.network");
+    if (/bad credentials/i.test(msg)) return t("sync.error.badtoken");
+    if (/not accessible|not authorized|forbidden/i.test(msg) || err.status === 403) return t("sync.error.forbidden");
+    if (/branch/i.test(msg) && /not found/i.test(msg)) return t("sync.error.branch", cfg && cfg.branch);
+    if (err.status === 404 || /not found/i.test(msg)) return t("sync.error.notfound");
+    if (msg) return msg;
+    return t("sync.error.generic");
+  }
+
   async function fetchCloudData(cfg) {
     const headers = { Accept: "application/vnd.github+json" };
     if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`;
     const url = githubApiUrl(cfg) + (cfg.branch ? `?ref=${encodeURIComponent(cfg.branch)}` : "");
-    const res = await fetch(url, { headers });
+    const res = await fetchWithTimeout(url, { headers });
     if (res.status === 404) return { sha: null, data: null };
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `github-fetch-${res.status}`);
+      const err = new Error(body.message || `github-fetch-${res.status}`);
+      err.status = res.status;
+      throw err;
     }
     const json = await res.json();
     const decoded = b64DecodeUnicode(json.content);
@@ -250,7 +309,7 @@
     };
     if (cfg.branch) body.branch = cfg.branch;
     if (sha) body.sha = sha;
-    const res = await fetch(githubApiUrl(cfg), { method: "PUT", headers, body: JSON.stringify(body) });
+    const res = await fetchWithTimeout(githubApiUrl(cfg), { method: "PUT", headers, body: JSON.stringify(body) });
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
       const err = new Error(errJson.message || `github-push-${res.status}`);
@@ -523,6 +582,7 @@
     el.syncStatusText.textContent = t(entry.key);
     el.syncStatusBtn.classList.toggle("is-error", state.github.status === "error");
     el.syncStatusBtn.classList.toggle("is-synced", state.github.status === "synced");
+    el.syncStatusBtn.title = state.github.status === "error" && state.github.errorMsg ? state.github.errorMsg : "";
   }
 
   function renderAll() {
@@ -572,11 +632,11 @@
           setSyncStatus("synced");
           return;
         } catch (err2) {
-          setSyncStatus("error", err2.message);
+          setSyncStatus("error", friendlyGithubError(err2, cfg));
           return;
         }
       }
-      setSyncStatus("error", err.message);
+      setSyncStatus("error", friendlyGithubError(err, cfg));
     }
   }
 
@@ -607,10 +667,7 @@
         setSyncStatus("synced");
       }
     } catch (err) {
-      setSyncStatus("error", err.message);
-      if (initial) {
-        // Keep working from the local cache while offline/misconfigured.
-      }
+      setSyncStatus("error", friendlyGithubError(err, cfg));
     }
   }
 
@@ -685,9 +742,14 @@
     el.syncRepo.value = cfg ? `${cfg.owner}/${cfg.repo}` : "";
     el.syncBranch.value = cfg && cfg.branch ? cfg.branch : "main";
     el.syncToken.value = cfg ? cfg.token : "";
-    el.syncError.hidden = true;
     el.syncSuccess.hidden = true;
     el.syncDisconnect.hidden = !cfg;
+    if (state.github.status === "error" && state.github.errorMsg) {
+      el.syncError.textContent = state.github.errorMsg;
+      el.syncError.hidden = false;
+    } else {
+      el.syncError.hidden = true;
+    }
     el.syncModal.hidden = false;
   }
 
@@ -809,24 +871,23 @@
     el.syncError.hidden = true;
     el.syncSuccess.hidden = true;
 
-    const repoRaw = el.syncRepo.value.trim();
+    const parsed = parseRepoInput(el.syncRepo.value);
     const token = el.syncToken.value.trim();
     const branch = el.syncBranch.value.trim() || "main";
-    const parts = repoRaw.split("/").map((p) => p.trim()).filter(Boolean);
 
-    if (parts.length !== 2 || !token) {
+    if (!parsed || !token) {
       el.syncError.textContent = t("sync.error.fields");
       el.syncError.hidden = false;
       return;
     }
 
-    const cfg = { owner: parts[0], repo: parts[1], branch, token };
+    const cfg = { owner: parsed.owner, repo: parsed.repo, branch, token };
+    const submitBtn = el.syncForm.querySelector("button[type=submit]");
+    submitBtn.disabled = true;
 
     try {
       setSyncStatus("syncing");
       const result = await fetchCloudData(cfg);
-      state.github.config = cfg;
-      saveGithubConfig(cfg);
       if (result.data === null) {
         const newSha = await pushCloudData(cfg, state.data, null);
         state.github.sha = newSha;
@@ -838,6 +899,9 @@
           state.currentUserId = null;
         }
       }
+      // Only persist the config once we've actually confirmed it works end to end.
+      state.github.config = cfg;
+      saveGithubConfig(cfg);
       setSyncStatus("synced");
       el.syncSuccess.hidden = false;
       el.syncDisconnect.hidden = false;
@@ -845,9 +909,12 @@
       setTimeout(closeSyncModal, 900);
     } catch (err) {
       state.github.config = null;
+      clearGithubConfig();
       setSyncStatus("off");
-      el.syncError.textContent = t("sync.error.generic");
+      el.syncError.textContent = friendlyGithubError(err, cfg);
       el.syncError.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
     }
   });
 
@@ -860,19 +927,17 @@
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && state.github.config) {
+    if (document.visibilityState === "visible" && state.github.config && state.github.status !== "syncing") {
       pullNow(false);
     }
   });
 
   /* ---------------- boot ---------------- */
-  async function init() {
+  function init() {
     applyI18n();
 
-    if (state.github.config) {
-      await pullNow(true);
-    }
-
+    // Always show the app straight away from the local cache — a slow or
+    // failing GitHub connection should never leave the page blank.
     const firstUser = state.data.users[0];
     if (firstUser) {
       if (state.unlocked.has(firstUser.id)) {
@@ -884,6 +949,12 @@
       }
     } else {
       renderAll();
+    }
+
+    // Sync with GitHub in the background, if configured; renders again
+    // on its own once (if) it resolves.
+    if (state.github.config) {
+      pullNow(true);
     }
   }
 

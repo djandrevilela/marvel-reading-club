@@ -69,6 +69,35 @@ passwords dos leitores:**
 Se preferires não usar um token de todo, a app funciona perfeitamente sem
 sincronização — cada dispositivo guarda o progresso só localmente.
 
+### Se a sincronização não ligar
+
+Havia três problemas que causavam exatamente "demora muito tempo e não liga" — já corrigidos:
+
+1. **A app ficava à espera da rede antes de mostrar seja o que for.** Agora
+   mostra sempre logo os dados guardados neste dispositivo, e só depois tenta
+   ligar-se ao GitHub em segundo plano — nunca mais fica com a página em
+   branco à espera.
+2. **Sem limite de tempo nos pedidos.** Um pedido lento podia ficar preso
+   quase indefinidamente. Agora há um limite de 12 segundos: se o GitHub não
+   responder a tempo, aparece logo um erro claro em vez de ficar "a
+   sincronizar…" para sempre.
+3. **Erros genéricos e configuração inconsistente.** Se a ligação falhasse a
+   meio, o token ficava guardado na mesma, e a app voltava a tentar (e a
+   falhar) em todos os arranques seguintes. Agora só guarda a configuração
+   depois de confirmar que funciona de facto, e mostra a razão real do erro
+   (token inválido, repositório não encontrado, ramo errado, sem permissão de
+   escrita, sem ligação à internet) — toca na barra de sincronização para ver
+   a mensagem exata.
+
+Se depois disto continuar a falhar, os motivos mais comuns são:
+
+- **Token sem permissão** → confirma que é um token "fine-grained" com
+  `Contents: Read and write` **para este repositório específico**.
+- **Ramo errado** → repositórios mais antigos usam por vezes `master` em vez
+  de `main`. Confirma no GitHub, no separador de ficheiros do repositório.
+- **Repositório mal escrito** → tanto faz escrever `utilizador/repo` como
+  colar o link completo `https://github.com/utilizador/repo`.
+
 ### Limitações a saber
 
 - Cada marcação de "Lido" gera um **commit** no repositório (com uma pequena
