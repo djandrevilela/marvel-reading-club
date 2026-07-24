@@ -113,12 +113,6 @@ Se depois disto continuar a falhar, os motivos mais comuns são:
 
 ## Passwords já definidas
 
-| Leitor  | Password   |
-|---------|------------|
-| André   | `andre123`  |
-| Filipe  | `filipe123` |
-| Duarte  | `duarte123` |
-
 São passwords **simples de propósito** (só para evitar que alguém marque
 capítulos de outra pessoa sem querer) — não é segurança "a sério", o hash
 usado é só ofuscação, não criptografia. Qualquer um destes leitores pode
