@@ -452,6 +452,9 @@ body {
   z-index: 100;
   padding: 0;
 }
+.modal-overlay[hidden] {
+  display: none !important;
+}
 @media (min-width: 560px) {
   .modal-overlay { align-items: center; padding: 20px; }
 }
