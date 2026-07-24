@@ -6,7 +6,8 @@
        lida/escrita através da GitHub Contents API (fetch, sem backend próprio)
    Configuração da sincronização (repo + token) fica em mrc_github_config,
    só neste browser — ver aviso no modal de sincronização.
-   Os capítulos/livros (CHAPTERS, BOOKS_META) vêm de data.js e são sempre
+   Os capítulos/livros e os filmes/séries (CHAPTERS/BOOKS_META e
+   MOVIES/PHASES_META, agrupados em COLLECTIONS) vêm de data.js e são sempre
    locais/estáticos, não fazem parte do ficheiro sincronizado.
    ============================================================ */
 
@@ -38,6 +39,8 @@
       "adduser.error": "Esse nome já existe. Escolhe outro.",
       "adduser.submit": "Criar leitor",
       "add.tab": "＋ Novo",
+      "collection.books.title": "Livros",
+      "collection.movies.title": "Filmes/TV",
       "book.count": (done, total) => `${done}/${total} lidos`,
       "empty.next": "Já não há capítulos por ler nesta vista. Boa leitura! 🎉",
       "empty.history": "Ainda não marcaste nenhum capítulo como lido.",
@@ -105,6 +108,8 @@
       "adduser.error": "That name already exists. Pick another.",
       "adduser.submit": "Create reader",
       "add.tab": "＋ Add",
+      "collection.books.title": "Books",
+      "collection.movies.title": "Movies/TV",
       "book.count": (done, total) => `${done}/${total} read`,
       "empty.next": "No unread issues left in this view. Happy reading! 🎉",
       "empty.history": "You haven't ticked off any issue yet.",
@@ -167,29 +172,57 @@
   }
 
   /* ---------------- default data ---------------- */
+  function emptyProgress() {
+    return { books: {}, movies: {} };
+  }
+
   function defaultClubData() {
     return {
-      version: 1,
+      version: 2,
       updatedAt: new Date().toISOString(),
       users: [
         { id: "andre", name: "André", passHash: simpleHash("andre123") },
         { id: "filipe", name: "Filipe", passHash: simpleHash("filipe123") },
         { id: "duarte", name: "Duarte", passHash: simpleHash("duarte123") },
       ],
-      progress: { andre: {}, filipe: {}, duarte: {} },
+      progress: { andre: emptyProgress(), filipe: emptyProgress(), duarte: emptyProgress() },
     };
+  }
+
+  // Data created before the Movies/TV collection existed stored progress as
+  // a flat { chapterId: true } map per user (implicitly "books"). Upgrade
+  // that shape to { books: {...}, movies: {} } in place, so old local caches
+  // and old club-data.json files keep working without losing progress.
+  function migrateClubData(data) {
+    if (!data || typeof data !== "object") return data;
+    if (!data.progress) data.progress = {};
+    (data.users || []).forEach((u) => {
+      const bucket = data.progress[u.id];
+      if (!bucket || typeof bucket !== "object") {
+        data.progress[u.id] = emptyProgress();
+      } else if (!("books" in bucket) && !("movies" in bucket)) {
+        // Old flat shape: every key was a chapter id.
+        data.progress[u.id] = { books: bucket, movies: {} };
+      } else {
+        if (!bucket.books) bucket.books = {};
+        if (!bucket.movies) bucket.movies = {};
+      }
+    });
+    data.version = 2;
+    return data;
   }
 
   /* ---------------- local storage (offline cache / fallback) ---------------- */
   const LS_STATE = "mrc_club_state";
   const LS_LANG = "mrc_lang";
+  const LS_COLLECTION = "mrc_collection";
   const LS_GH_CONFIG = "mrc_github_config";
   const DATA_PATH = "club-data.json";
 
   function loadLocalData() {
     const raw = localStorage.getItem(LS_STATE);
     if (raw) {
-      try { return JSON.parse(raw); } catch (e) { /* fall through */ }
+      try { return migrateClubData(JSON.parse(raw)); } catch (e) { /* fall through */ }
     }
     const data = defaultClubData();
     localStorage.setItem(LS_STATE, JSON.stringify(data));
@@ -328,7 +361,7 @@
     }
     const json = await res.json();
     const decoded = b64DecodeUnicode(json.content);
-    const data = JSON.parse(decoded);
+    const data = migrateClubData(JSON.parse(decoded));
     logInfo("fetchCloudData: success", { sha: json.sha, users: data.users && data.users.length, updatedAt: data.updatedAt });
     return { sha: json.sha, data };
   }
@@ -365,8 +398,9 @@
 
   /* ---------------- app state ---------------- */
   const state = {
-    data: loadLocalData(), // { version, updatedAt, users, progress }
+    data: loadLocalData(), // { version, updatedAt, users, progress: { [userId]: { books:{}, movies:{} } } }
     currentUserId: null,
+    collection: localStorage.getItem(LS_COLLECTION) === "movies" ? "movies" : "books",
     view: "proximos", // proximos | historico | todos
     lang: localStorage.getItem(LS_LANG) || "pt",
     unlocked: new Set(JSON.parse(sessionStorage.getItem("mrc_unlocked") || "[]")),
@@ -384,9 +418,21 @@
     sessionStorage.setItem("mrc_unlocked", JSON.stringify([...state.unlocked]));
   }
 
+  // The two parallel collections (Livros / Movies-TV) share all the same
+  // logic below; these two helpers are the only place that decides which
+  // dataset and which progress sub-bucket is "current".
+  function currentItems() {
+    return COLLECTIONS[state.collection].items;
+  }
+  function currentMeta() {
+    return COLLECTIONS[state.collection].meta;
+  }
+
   function ensureProgressBucket(userId) {
-    if (!state.data.progress[userId]) state.data.progress[userId] = {};
-    return state.data.progress[userId];
+    if (!state.data.progress[userId]) state.data.progress[userId] = emptyProgress();
+    const bucket = state.data.progress[userId];
+    if (!bucket[state.collection]) bucket[state.collection] = {};
+    return bucket[state.collection];
   }
 
   function isDone(chapterId) {
@@ -451,8 +497,17 @@
       const key = node.getAttribute("data-i18n-placeholder");
       node.setAttribute("placeholder", t(key));
     });
+    document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+      const key = node.getAttribute("data-i18n-title");
+      node.setAttribute("title", t(key));
+    });
     document.querySelectorAll(".lang-btn").forEach((btn) => {
       const isActive = btn.dataset.lang === state.lang;
+      btn.classList.toggle("is-active", isActive);
+      btn.setAttribute("aria-pressed", String(isActive));
+    });
+    document.querySelectorAll(".collection-btn").forEach((btn) => {
+      const isActive = btn.dataset.collection === state.collection;
       btn.classList.toggle("is-active", isActive);
       btn.setAttribute("aria-pressed", String(isActive));
     });
@@ -501,36 +556,41 @@
   }
 
   function renderProgressStamp() {
-    const total = CHAPTERS.length;
-    const done = CHAPTERS.filter((c) => isDone(c.id)).length;
+    const items = currentItems();
+    const total = items.length;
+    const done = items.filter((c) => isDone(c.id)).length;
     el.progressCount.textContent = `${done}/${total}`;
     el.progressFill.style.width = total ? `${Math.round((done / total) * 100)}%` : "0%";
   }
 
   function renderNextUp() {
-    const next = CHAPTERS.find((c) => !isDone(c.id));
+    const items = currentItems();
+    const meta = currentMeta();
+    const next = items.find((c) => !isDone(c.id));
     if (!next || state.view !== "proximos") {
       el.nextUpZone.hidden = true;
       return;
     }
     el.nextUpZone.hidden = false;
-    const meta = BOOKS_META[next.book] || { color: "var(--blue)", short: next.book };
+    const bookMeta = meta[next.book] || { color: "var(--blue)", short: next.book };
     el.nextUpCard.innerHTML = `
       <div class="next-up-badge">#${next.id}</div>
       <div class="next-up-body">
         <p class="next-up-edition">${escapeHtml(next.edition)}</p>
-        <p class="next-up-meta">${formatDate(next.date)} · ${escapeHtml(meta.short || next.book)}</p>
+        <p class="next-up-meta">${formatDate(next.date)} · ${escapeHtml(bookMeta.short || next.book)}</p>
       </div>
     `;
   }
 
   function chaptersForView() {
-    if (state.view === "proximos") return CHAPTERS.filter((c) => !isDone(c.id));
-    if (state.view === "historico") return CHAPTERS.filter((c) => isDone(c.id));
-    return CHAPTERS.slice();
+    const items = currentItems();
+    if (state.view === "proximos") return items.filter((c) => !isDone(c.id));
+    if (state.view === "historico") return items.filter((c) => isDone(c.id));
+    return items.slice();
   }
 
   function renderList() {
+    const items = currentItems();
     const chapters = chaptersForView();
     el.chapterList.innerHTML = "";
 
@@ -556,8 +616,8 @@
       const section = document.createElement("section");
       section.className = "book-group";
 
-      const totalInBook = CHAPTERS.filter((c) => c.book === group.book).length;
-      const doneInBook = CHAPTERS.filter((c) => c.book === group.book && isDone(c.id)).length;
+      const totalInBook = items.filter((c) => c.book === group.book).length;
+      const doneInBook = items.filter((c) => c.book === group.book && isDone(c.id)).length;
 
       const header = document.createElement("div");
       header.className = "book-header";
@@ -567,17 +627,45 @@
       `;
       section.appendChild(header);
 
-      group.items.forEach((c) => {
-        section.appendChild(renderChapterCard(c));
+      // Several sessions can land on the same day (e.g. a movie + a
+      // One-Shot, or two episode batches). Cluster consecutive same-date
+      // items so the day only appears once, with one card per session.
+      dayClusters(group.items).forEach((cluster) => {
+        if (cluster.items.length > 1) {
+          const dayLabel = document.createElement("p");
+          dayLabel.className = "day-cluster-label";
+          dayLabel.textContent = `${formatDate(cluster.date)} · ${cluster.items.length}×`;
+          section.appendChild(dayLabel);
+          const wrap = document.createElement("div");
+          wrap.className = "day-cluster";
+          cluster.items.forEach((c) => wrap.appendChild(renderChapterCard(c, { hideDate: true })));
+          section.appendChild(wrap);
+        } else {
+          section.appendChild(renderChapterCard(cluster.items[0]));
+        }
       });
 
       el.chapterList.appendChild(section);
     });
   }
 
-  function renderChapterCard(c) {
+  function dayClusters(items) {
+    const clusters = [];
+    items.forEach((c) => {
+      const last = clusters[clusters.length - 1];
+      if (last && last.date === c.date) {
+        last.items.push(c);
+      } else {
+        clusters.push({ date: c.date, items: [c] });
+      }
+    });
+    return clusters;
+  }
+
+  function renderChapterCard(c, opts) {
+    const hideDate = opts && opts.hideDate;
     const done = isDone(c.id);
-    const meta = BOOKS_META[c.book] || { color: "#333", short: c.book };
+    const meta = currentMeta()[c.book] || { color: "#333", short: c.book };
     const card = document.createElement("article");
     card.className = "chapter-card" + (done ? " is-done" : "");
 
@@ -591,7 +679,7 @@
     body.innerHTML = `
       <p class="chapter-edition">${escapeHtml(c.edition)}</p>
       <div class="chapter-meta">
-        <span class="chapter-date">${formatDate(c.date)}</span>
+        ${hideDate ? "" : `<span class="chapter-date">${formatDate(c.date)}</span>`}
         <span class="chapter-tag" style="background:${meta.color}">${escapeHtml(meta.short || c.book)}</span>
       </div>
     `;
@@ -835,6 +923,17 @@
     });
   });
 
+  document.querySelectorAll(".collection-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.collection === state.collection) return;
+      state.collection = btn.dataset.collection;
+      localStorage.setItem(LS_COLLECTION, state.collection);
+      logInfo("collection switched to", state.collection);
+      applyI18n();
+      renderAll();
+    });
+  });
+
   el.lockForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const userId = state.pendingUnlockId;
@@ -866,7 +965,7 @@
       return;
     }
     state.data.users.push({ id, name, passHash: simpleHash(pass) });
-    state.data.progress[id] = {};
+    state.data.progress[id] = emptyProgress();
     state.unlocked.add(id);
     persistUnlocked();
     scheduleSync();

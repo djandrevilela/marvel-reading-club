@@ -71,7 +71,25 @@ sincronização — cada dispositivo guarda o progresso só localmente.
 
 ### Se a sincronização não ligar
 
-Havia três problemas que causavam exatamente "demora muito tempo e não liga" — já corrigidos:
+A app agora regista tudo o que faz na **consola do browser** (tecla F12, ou
+botão direito → Inspecionar → separador "Console"). Procura por linhas com
+a etiqueta `[MRC sync]` — mostram, passo a passo:
+
+- o URL exato a que está a tentar ligar-se e o método (GET/PUT);
+- o código de resposta do GitHub (200, 401, 403, 404, 409, etc.);
+- a mensagem de erro literal devolvida pelo GitHub quando algo falha;
+- se o token está a ser enviado (nunca o valor, só o comprimento e os
+  primeiros 4 caracteres, para confirmares que colaste o token certo);
+- cada decisão tomada (criar o ficheiro pela primeira vez, adotar os dados
+  da nuvem, ignorar porque nada mudou, etc.).
+
+Se voltar a falhar, abre a consola, tenta ligar outra vez, e copia as linhas
+`[MRC sync]` mais recentes (principalmente as marcadas a vermelho/erro) — é
+o suficiente para identificar exatamente onde está a falhar (token, repo,
+ramo, permissões, rede).
+
+Corrigi também três problemas que causavam exatamente "demora muito tempo e
+não liga":
 
 1. **A app ficava à espera da rede antes de mostrar seja o que for.** Agora
    mostra sempre logo os dados guardados neste dispositivo, e só depois tenta
@@ -100,6 +118,12 @@ Se depois disto continuar a falhar, os motivos mais comuns são:
 
 ### Limitações a saber
 
+- Se já tinhas um `club-data.json` de antes desta funcionalidade, a app
+  migra-o sozinha na primeira vez que abrir depois desta atualização — o teu
+  progresso antigo passa automaticamente a contar como progresso de
+  **Livros**, e a coleção **Movies/TV** começa do zero. Não precisas de fazer
+  nada manualmente.
+
 - Cada marcação de "Lido" gera um **commit** no repositório (com uma pequena
   pausa de ~1,2s a agrupar cliques seguidos para não gerar um commit por
   clique). Para um grupo pequeno de amigos isto é perfeitamente aceitável;
@@ -112,6 +136,12 @@ Se depois disto continuar a falhar, os motivos mais comuns são:
   entretanto.
 
 ## Passwords já definidas
+
+| Leitor  | Password   |
+|---------|------------|
+| André   | `andre123`  |
+| Filipe  | `filipe123` |
+| Duarte  | `duarte123` |
 
 São passwords **simples de propósito** (só para evitar que alguém marque
 capítulos de outra pessoa sem querer) — não é segurança "a sério", o hash
@@ -139,25 +169,47 @@ o novo leitor apareça também nos outros telemóveis/computadores, cada pessoa
 tem de criar o mesmo leitor (mesmo nome) no seu próprio browser, ou combinamos
 uma password fixa.
 
+## Livros / Movies-TV
+
+Botão **📚 / 🎬** no canto superior direito, à esquerda do PT/EN — troca entre
+duas coleções completamente independentes:
+
+- **📚 Livros**: os 155 capítulos dos Omnibus + Secret Wars (como antes).
+- **🎬 Movies/TV**: os 155 filmes/séries/especiais do maratona MCU + Legacy
+  (gerado a partir do segundo Excel), com as mesmas regras — Próximos /
+  Histórico / Todos, agrupado por Fase/Categoria, checkbox "Lido", e
+  progresso **isolado por leitor** (o André marcar um filme não afeta o
+  Filipe, nem mistura com os livros).
+
+Quando várias sessões caem no mesmo dia (ex: um filme + um Marvel One-Shot,
+ou dois blocos de episódios), a app agrupa-as visualmente sob a mesma data
+— mas continuam a ser itens separados na lista, cada um com o seu próprio
+checkbox "Lido".
+
+Cada leitor guarda o seu progresso separadamente para cada coleção — não há
+nada extra a configurar, a app já sabe distinguir os dois.
+
 ## Estrutura
 
 ```
-index.html       → estrutura da página (tabs, filtros, modals)
+index.html       → estrutura da página (tabs, filtros, modals, seletor Livros/Movies)
 styles.css       → design (estilo "banda desenhada": ink outlines, halftone, stamps)
-app.js           → lógica: leitores, progresso, vistas, i18n, sincronização GitHub
-data.js          → os 155 capítulos + metadados dos 5 livros (estático)
-club-data.json   → criado automaticamente na 1ª sincronização: leitores + progresso
+app.js           → lógica: leitores, progresso (por coleção), vistas, i18n, sincronização GitHub
+data.js          → os 155 capítulos (Livros) + os 155 filmes/séries (Movies/TV), estático
+club-data.json   → criado automaticamente na 1ª sincronização: leitores + progresso de ambas as coleções
 ```
 
 ## Vistas por leitor
 
-- **Próximos** (default): capítulos ainda não marcados como lidos, agrupados
-  por Livro, com destaque para o "a seguir na pilha".
+- **Próximos** (default): itens ainda não marcados como lidos, agrupados
+  por Livro/Fase, com destaque para o "a seguir na pilha".
 - **Histórico**: só os já marcados como lidos.
 - **Todos**: lista completa, lidos e por ler.
+
+Aplicam-se sempre à coleção atualmente selecionada (Livros ou Movies/TV).
 
 ## Idioma
 
 Botões **PT / EN** no canto superior direito — traduz toda a interface
-(pt-PT / en-GB). Os títulos das edições (nomes das revistas) mantêm-se no
-original, como no Excel.
+(pt-PT / en-GB). Os títulos das edições/filmes (nomes das revistas, filmes
+e séries) mantêm-se no original, como nos Excel.

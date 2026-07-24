@@ -102,6 +102,29 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.topbar-controls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.collection-switch {
+  flex: none;
+  display: flex;
+  border: 2px solid #fff;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.collection-btn {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.collection-btn.is-active { background: var(--yellow); }
 .lang-switch {
   flex: none;
   display: flex;
@@ -343,6 +366,22 @@ body {
 
 .chapter-list { position: relative; }
 
+.day-cluster-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+  margin: 0 0 4px 4px;
+}
+.day-cluster {
+  border-left: 3px solid var(--yellow);
+  padding-left: 8px;
+  margin-bottom: 10px;
+}
+.day-cluster .chapter-card { margin-bottom: 6px; }
+.day-cluster .chapter-card:last-child { margin-bottom: 0; }
+
 .chapter-card {
   background: var(--paper-raised);
   border: 2px solid var(--ink);
@@ -513,7 +552,7 @@ body {
   border-radius: var(--radius);
   background: var(--paper);
 }
-.text-input:focus, .segment:focus-visible, .tab-btn:focus-visible, .lang-btn:focus-visible, .lido-toggle:focus-visible, .btn-primary:focus-visible {
+.text-input:focus, .segment:focus-visible, .tab-btn:focus-visible, .lang-btn:focus-visible, .collection-btn:focus-visible, .lido-toggle:focus-visible, .btn-primary:focus-visible {
   outline: 3px solid var(--yellow);
   outline-offset: 1px;
 }
