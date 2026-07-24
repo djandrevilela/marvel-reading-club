@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marvel Reading Club — Time Runs Out &amp; Secret Wars</title>
+<meta name="description" content="Guia de leitura partilhado para o Marvel Reading Club.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%A5%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Halftone backdrop, decorative only -->
+<div class="halftone-backdrop" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-burst" aria-hidden="true">★</span>
+      <div class="brand-text">
+        <h1 data-i18n="app.title">MARVEL READING CLUB</h1>
+        <p class="brand-sub" data-i18n="app.subtitle">Time Runs Out &amp; Secret Wars — guia de leitura</p>
+      </div>
+    </div>
+    <div class="lang-switch" role="group" aria-label="Idioma / Language">
+      <button class="lang-btn is-active" data-lang="pt" aria-pressed="true">PT</button>
+      <button class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+</header>
+
+<div class="sync-bar">
+  <button type="button" class="sync-status" id="syncStatusBtn">
+    <span id="syncStatusIcon">📴</span>
+    <span id="syncStatusText" data-i18n="sync.status.off">Sem sincronização — só neste dispositivo</span>
+  </button>
+</div>
+
+<main class="app-main">
+
+  <nav class="user-tabs" id="userTabs" aria-label="Leitores"></nav>
+
+  <div class="account-row" id="accountRow" hidden>
+    <button type="button" class="link-btn" id="changePasswordBtn" data-i18n="account.changepass">🔑 Alterar password</button>
+  </div>
+
+  <section class="control-bar">
+    <div class="segmented" id="viewSegmented" role="tablist" aria-label="Vista">
+      <button class="segment is-active" data-view="proximos" role="tab" aria-selected="true" data-i18n="view.next">Próximos</button>
+      <button class="segment" data-view="historico" role="tab" aria-selected="false" data-i18n="view.history">Histórico</button>
+      <button class="segment" data-view="todos" role="tab" aria-selected="false" data-i18n="view.all">Todos</button>
+    </div>
+    <div class="progress-stamp" id="progressStamp" aria-live="polite">
+      <span class="stamp-count" id="progressCount">0/0</span>
+      <span class="stamp-label" data-i18n="progress.read">LIDOS</span>
+    </div>
+  </section>
+
+  <div class="progress-track" aria-hidden="true">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <section id="nextUpZone" class="next-up" hidden>
+    <p class="next-up-eyebrow" data-i18n="nextup.eyebrow">A seguir na pilha</p>
+    <div class="next-up-card" id="nextUpCard"></div>
+  </section>
+
+  <section id="chapterList" class="chapter-list" aria-live="polite"></section>
+
+  <p class="empty-state" id="emptyState" hidden></p>
+
+</main>
+
+<footer class="app-footer">
+  <p data-i18n="footer.note">Guia de leitura gerado a partir do mapeamento por Omnibus. Marca cada número como lido — só tu vês o teu progresso.</p>
+</footer>
+
+<!-- Password / unlock modal -->
+<div class="modal-overlay" id="lockModal" hidden>
+  <div class="modal comic-panel" role="dialog" aria-modal="true" aria-labelledby="lockModalTitle">
+    <button class="modal-close" id="lockModalClose" aria-label="Fechar">✕</button>
+    <p class="modal-eyebrow" data-i18n="lock.eyebrow">Acesso privado</p>
+    <h2 id="lockModalTitle" class="modal-title"><span id="lockModalName">—</span></h2>
+    <p class="modal-copy" data-i18n="lock.copy">Introduz a password para ver e marcar este progresso.</p>
+    <form id="lockForm">
+      <input type="password" id="lockPassword" class="text-input" autocomplete="current-password" required data-i18n-placeholder="lock.placeholder" placeholder="Password">
+      <p class="form-error" id="lockError" hidden data-i18n="lock.error">Password incorreta. Tenta outra vez.</p>
+      <button type="submit" class="btn-primary" data-i18n="lock.submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<!-- Add user modal -->
+<div class="modal-overlay" id="addUserModal" hidden>
+  <div class="modal comic-panel" role="dialog" aria-modal="true" aria-labelledby="addUserModalTitle">
+    <button class="modal-close" id="addUserModalClose" aria-label="Fechar">✕</button>
+    <p class="modal-eyebrow" data-i18n="adduser.eyebrow">Novo leitor</p>
+    <h2 id="addUserModalTitle" class="modal-title" data-i18n="adduser.title">Junta-te ao clube</h2>
+    <form id="addUserForm">
+      <label class="field-label" data-i18n="adduser.namelabel">Nome</label>
+      <input type="text" id="addUserName" class="text-input" required maxlength="24" data-i18n-placeholder="adduser.nameplaceholder" placeholder="O teu nome">
+      <label class="field-label" data-i18n="adduser.passlabel">Password</label>
+      <input type="password" id="addUserPassword" class="text-input" required minlength="4" autocomplete="new-password" data-i18n-placeholder="adduser.passplaceholder" placeholder="Escolhe uma password">
+      <p class="form-error" id="addUserError" hidden data-i18n="adduser.error">Esse nome já existe. Escolhe outro.</p>
+      <button type="submit" class="btn-primary" data-i18n="adduser.submit">Criar leitor</button>
+    </form>
+  </div>
+</div>
+
+<!-- Change password modal -->
+<div class="modal-overlay" id="changePasswordModal" hidden>
+  <div class="modal comic-panel" role="dialog" aria-modal="true" aria-labelledby="changePasswordModalTitle">
+    <button class="modal-close" id="changePasswordModalClose" aria-label="Fechar">✕</button>
+    <p class="modal-eyebrow" data-i18n="changepass.eyebrow">Segurança (a sério, não muito)</p>
+    <h2 id="changePasswordModalTitle" class="modal-title" data-i18n="changepass.title">Alterar password</h2>
+    <p class="warning-box" data-i18n="changepass.warning">
+      Isto não é segurança a sério: a password fica só ligeiramente disfarçada (não encriptada) no teu browser. Serve só para os leitores não mexerem uns nos progressos dos outros por engano — não uses aqui uma password que também uses noutro sítio.
+    </p>
+    <form id="changePasswordForm">
+      <label class="field-label" data-i18n="changepass.current">Password atual</label>
+      <input type="password" id="changePasswordCurrent" class="text-input" required autocomplete="current-password" data-i18n-placeholder="lock.placeholder" placeholder="Password">
+      <label class="field-label" data-i18n="changepass.new">Nova password</label>
+      <input type="password" id="changePasswordNew" class="text-input" required minlength="4" autocomplete="new-password" data-i18n-placeholder="adduser.passplaceholder" placeholder="Escolhe uma password">
+      <label class="field-label" data-i18n="changepass.confirm">Confirmar nova password</label>
+      <input type="password" id="changePasswordConfirm" class="text-input" required minlength="4" autocomplete="new-password" data-i18n-placeholder="changepass.confirm" placeholder="Confirmar nova password">
+      <p class="form-error" id="changePasswordError" hidden></p>
+      <p class="form-success" id="changePasswordSuccess" hidden data-i18n="changepass.success">Password alterada.</p>
+      <button type="submit" class="btn-primary" data-i18n="changepass.submit">Guardar nova password</button>
+    </form>
+  </div>
+</div>
+
+<!-- GitHub sync modal -->
+<div class="modal-overlay" id="syncModal" hidden>
+  <div class="modal comic-panel" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
+    <button class="modal-close" id="syncModalClose" aria-label="Fechar">✕</button>
+    <p class="modal-eyebrow" data-i18n="sync.eyebrow">Guardar no GitHub</p>
+    <h2 id="syncModalTitle" class="modal-title" data-i18n="sync.title">Sincronização entre dispositivos</h2>
+    <p class="warning-box" data-i18n="sync.warning">
+      O token fica guardado em texto simples neste browser (não encriptado) — não é segurança a sério. Usa sempre um token "fine-grained" limitado só a este repositório, com permissão apenas de "Contents: Read and write". Não uses um token com acesso a outros repositórios ou contas.
+    </p>
+    <form id="syncForm">
+      <label class="field-label" data-i18n="sync.repo">Repositório (utilizador/repo)</label>
+      <input type="text" id="syncRepo" class="text-input" data-i18n-placeholder="sync.repo.placeholder" placeholder="ex: andre/marvel-reading-club">
+      <label class="field-label" data-i18n="sync.branch">Ramo</label>
+      <input type="text" id="syncBranch" class="text-input" placeholder="main">
+      <label class="field-label" data-i18n="sync.token">Personal Access Token</label>
+      <input type="password" id="syncToken" class="text-input" autocomplete="off" data-i18n-placeholder="sync.token.placeholder" placeholder="ghp_... ou github_pat_...">
+      <p class="form-error" id="syncError" hidden></p>
+      <p class="form-success" id="syncSuccess" hidden data-i18n="sync.success">Ligado! A sincronizar…</p>
+      <button type="submit" class="btn-primary" data-i18n="sync.submit">Guardar e sincronizar</button>
+    </form>
+    <button type="button" class="link-btn" id="syncDisconnect" data-i18n="sync.disconnect" style="margin-top:14px; display:block;" hidden>Desligar sincronização (voltar a só este dispositivo)</button>
+    <p class="modal-help" data-i18n="sync.help">Como criar o token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → New token. Escolhe só este repositório e a permissão "Contents: Read and write".</p>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
