@@ -1,9 +1,7 @@
 # Marvel Reading Club — Time Runs Out & Secret Wars
 
 Webapp simples (HTML + CSS + JS puro, sem build) para acompanhar a leitura
-partilhada dos 4 Omnibus + Secret Wars. Pensada para ser publicada no
-**GitHub Pages** só com o `index.html` na raiz — não precisa de servidor,
-Node, nem build step.
+partilhada dos 4 Omnibus + Secret Wars, e o maratona MCU + Legacy em paralelo.
 
 ## Como funciona a "base de dados"
 
@@ -124,14 +122,6 @@ Se depois disto continuar a falhar, os motivos mais comuns são:
   de app e voltas), para apanhar alterações feitas noutro dispositivo
   entretanto.
 
-## Passwords já definidas
-
-São passwords **simples de propósito** (só para evitar que alguém marque
-capítulos de outra pessoa sem querer) — não é segurança "a sério", o hash
-usado é só ofuscação, não criptografia. Qualquer um destes leitores pode
-mudar a password no futuro editando o `localStorage` (ou eu adiciono um botão
-para isso, se quiseres).
-
 ## Alterar password
 
 Com uma tab ativa (já com sessão iniciada), aparece um link **"🔑 Alterar
@@ -157,17 +147,28 @@ uma password fixa.
 Botão **📚 / 🎬** no canto superior direito, à esquerda do PT/EN — troca entre
 duas coleções completamente independentes:
 
-- **📚 Livros**: os 155 capítulos dos Omnibus + Secret Wars (como antes).
-- **🎬 Movies/TV**: os 155 filmes/séries/especiais do maratona MCU + Legacy
-  (gerado a partir do segundo Excel), com as mesmas regras — Próximos /
-  Histórico / Todos, agrupado por Fase/Categoria, checkbox "Lido", e
-  progresso **isolado por leitor** (o André marcar um filme não afeta o
-  Filipe, nem mistura com os livros).
+- **📚 Livros**: os 155 capítulos dos Omnibus + Secret Wars (como antes),
+  checkbox "Ler / Lido".
+- **🎬 Movies/TV**: 237 sessões (filmes, episódios e especiais) do maratona
+  MCU + Legacy (gerado a partir do segundo Excel), com as mesmas regras —
+  Próximos / Histórico / Todos, agrupado por Fase/Categoria, progresso
+  **isolado por leitor** (o André marcar algo não afeta o Filipe, nem
+  mistura com os livros) — mas com checkbox **"Ver / Visto"** em vez de
+  "Ler / Lido".
+
+Séries onde o Excel agrupava vários episódios no mesmo dia (ex: "Gavião
+Arqueiro (Parte: Eps. 1-2)") ficam separadas num item por episódio — ex:
+"Gavião Arqueiro — Ep. 1", "Gavião Arqueiro — Ep. 2" — mantendo sempre o
+nome original da série (e da temporada, quando o maratona tem mais do que
+uma, ex: "Loki — Temp. 2 — Ep. 5"). Os nomes originais de filmes, séries,
+especiais e sagas/fases nunca são abreviados ou alterados — os rótulos
+curtos (ex: "FASE 1") aparecem só como etiqueta de cor, o título completo
+mantém-se sempre visível no cabeçalho do grupo e no cartão de cada sessão.
 
 Quando várias sessões caem no mesmo dia (ex: um filme + um Marvel One-Shot,
-ou dois blocos de episódios), a app agrupa-as visualmente sob a mesma data
-— mas continuam a ser itens separados na lista, cada um com o seu próprio
-checkbox "Lido".
+ou dois episódios vistos de seguida), a app agrupa-as visualmente sob a
+mesma data — mas continuam a ser itens separados na lista, cada um com o
+seu próprio checkbox.
 
 Cada leitor guarda o seu progresso separadamente para cada coleção — não há
 nada extra a configurar, a app já sabe distinguir os dois.
@@ -178,7 +179,7 @@ nada extra a configurar, a app já sabe distinguir os dois.
 index.html       → estrutura da página (tabs, filtros, modals, seletor Livros/Movies)
 styles.css       → design (estilo "banda desenhada": ink outlines, halftone, stamps)
 app.js           → lógica: leitores, progresso (por coleção), vistas, i18n, sincronização GitHub
-data.js          → os 155 capítulos (Livros) + os 155 filmes/séries (Movies/TV), estático
+data.js          → os 155 capítulos (Livros) + as 237 sessões de filmes/séries (Movies/TV), estático
 club-data.json   → criado automaticamente na 1ª sincronização: leitores + progresso de ambas as coleções
 ```
 

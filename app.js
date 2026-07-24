@@ -22,7 +22,6 @@
       "view.next": "Próximos",
       "view.history": "Histórico",
       "view.all": "Todos",
-      "progress.read": "LIDOS",
       "nextup.eyebrow": "A seguir na pilha",
       "footer.note": "Guia de leitura gerado a partir do mapeamento por Omnibus. Marca cada número como lido — só tu vês o teu progresso.",
       "lock.eyebrow": "Acesso privado",
@@ -41,7 +40,7 @@
       "add.tab": "＋ Novo",
       "collection.books.title": "Livros",
       "collection.movies.title": "Filmes/TV",
-      "book.count": (done, total) => `${done}/${total} lidos`,
+      "book.count": (done, total, word) => `${done}/${total} ${word}`,
       "empty.next": "Já não há capítulos por ler nesta vista. Boa leitura! 🎉",
       "empty.history": "Ainda não marcaste nenhum capítulo como lido.",
       "empty.all": "Sem capítulos para mostrar.",
@@ -91,7 +90,6 @@
       "view.next": "Up next",
       "view.history": "History",
       "view.all": "All",
-      "progress.read": "READ",
       "nextup.eyebrow": "Next off the pile",
       "footer.note": "Reading guide generated from the Omnibus mapping. Tick off each issue — only you see your own progress.",
       "lock.eyebrow": "Private access",
@@ -110,7 +108,7 @@
       "add.tab": "＋ Add",
       "collection.books.title": "Books",
       "collection.movies.title": "Movies/TV",
-      "book.count": (done, total) => `${done}/${total} read`,
+      "book.count": (done, total, word) => `${done}/${total} ${word}`,
       "empty.next": "No unread issues left in this view. Happy reading! 🎉",
       "empty.history": "You haven't ticked off any issue yet.",
       "empty.all": "No issues to show.",
@@ -160,6 +158,23 @@
     const entry = I18N[state.lang][key];
     if (typeof entry === "function") return entry(...args);
     return entry || key;
+  }
+
+  // "Ler/Lido" for Livros, "Ver/Visto" for Movies/TV — everywhere that word
+  // shows up (the toggle button, its aria-label, the per-category count,
+  // the progress stamp) reads from here instead of being hardcoded.
+  const DONE_WORDS = {
+    pt: {
+      books: { toggleDone: "LIDO", toggleTodo: "LER", ariaDone: "Lido", plural: "lidos", stampLabel: "LIDOS" },
+      movies: { toggleDone: "VISTO", toggleTodo: "VER", ariaDone: "Visto", plural: "vistos", stampLabel: "VISTOS" },
+    },
+    en: {
+      books: { toggleDone: "READ", toggleTodo: "READ", ariaDone: "Read", plural: "read", stampLabel: "READ" },
+      movies: { toggleDone: "WATCHED", toggleTodo: "WATCH", ariaDone: "Watched", plural: "watched", stampLabel: "WATCHED" },
+    },
+  };
+  function doneWord(form) {
+    return DONE_WORDS[state.lang][state.collection][form];
   }
 
   /* ---------------- tiny "hash" (obfuscation, not real security) ---------------- */
@@ -445,6 +460,7 @@
     userTabs: document.getElementById("userTabs"),
     segmented: document.getElementById("viewSegmented"),
     progressCount: document.getElementById("progressCount"),
+    progressLabel: document.getElementById("progressLabel"),
     progressFill: document.getElementById("progressFill"),
     nextUpZone: document.getElementById("nextUpZone"),
     nextUpCard: document.getElementById("nextUpCard"),
@@ -560,6 +576,7 @@
     const total = items.length;
     const done = items.filter((c) => isDone(c.id)).length;
     el.progressCount.textContent = `${done}/${total}`;
+    el.progressLabel.textContent = doneWord("stampLabel");
     el.progressFill.style.width = total ? `${Math.round((done / total) * 100)}%` : "0%";
   }
 
@@ -623,7 +640,7 @@
       header.className = "book-header";
       header.innerHTML = `
         <h2 class="book-title">${escapeHtml(group.book)}</h2>
-        <span class="book-count">${t("book.count", doneInBook, totalInBook)}</span>
+        <span class="book-count">${t("book.count", doneInBook, totalInBook, doneWord("plural"))}</span>
       `;
       section.appendChild(header);
 
@@ -689,8 +706,8 @@
     toggle.type = "button";
     toggle.className = "lido-toggle" + (done ? " is-checked" : "");
     toggle.setAttribute("aria-pressed", String(done));
-    toggle.setAttribute("aria-label", "Lido");
-    toggle.textContent = done ? "LIDO" : "LER";
+    toggle.setAttribute("aria-label", doneWord("ariaDone"));
+    toggle.textContent = done ? doneWord("toggleDone") : doneWord("toggleTodo");
     toggle.addEventListener("click", () => toggleChapter(c.id));
     card.appendChild(toggle);
 
