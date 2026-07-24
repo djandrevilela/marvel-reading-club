@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-24T09:54:34.025Z",
+  "users": [
+    {
+      "id": "andre",
+      "name": "André",
+      "passHash": "un5mdl"
+    },
+    {
+      "id": "filipe",
+      "name": "Filipe",
+      "passHash": "19fl2i2"
+    },
+    {
+      "id": "duarte",
+      "name": "Duarte",
+      "passHash": "11yk892"
+    }
+  ],
+  "progress": {
+    "andre": {},
+    "filipe": {},
+    "duarte": {}
+  }
+}
