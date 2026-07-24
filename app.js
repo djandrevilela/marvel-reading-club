@@ -246,6 +246,30 @@
     return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${DATA_PATH}`;
   }
 
+  // ---- debug logging: every sync step goes to the console, tagged so it's
+  // easy to filter (devtools console filter: "MRC sync"). Never logs the
+  // token itself, only whether one is present and how long it is.
+  const LOG_TAG = "[MRC sync]";
+  function logInfo(...args) { console.log(LOG_TAG, ...args); }
+  function logWarn(...args) { console.warn(LOG_TAG, ...args); }
+  function logError(...args) { console.error(LOG_TAG, ...args); }
+  function safeCfg(cfg) {
+    if (!cfg) return cfg;
+    return {
+      owner: cfg.owner,
+      repo: cfg.repo,
+      branch: cfg.branch,
+      token: cfg.token ? `(set, ${cfg.token.length} chars, starts "${cfg.token.slice(0, 4)}…")` : "(missing)",
+    };
+  }
+
+  window.addEventListener("error", (e) => {
+    logError("uncaught error", e.error || e.message, e);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    logError("unhandled promise rejection", e.reason);
+  });
+
   // Plain fetch() can hang far longer than feels reasonable on a flaky
   // connection or a blocked host — abort it ourselves so the UI never
   // sits on "a sincronizar…" forever.
@@ -253,12 +277,17 @@
   async function fetchWithTimeout(url, options) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    logInfo("fetch →", options && options.method ? options.method : "GET", url);
     try {
-      return await fetch(url, { ...options, signal: controller.signal });
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      logInfo("fetch ←", res.status, res.statusText, url);
+      return res;
     } catch (err) {
       if (err.name === "AbortError") {
+        logError(`fetch timed out after ${REQUEST_TIMEOUT_MS}ms:`, url);
         throw new Error("timeout");
       }
+      logError("fetch network error:", url, err);
       throw new Error("network");
     } finally {
       clearTimeout(timer);
@@ -269,6 +298,7 @@
   // actionable sentence instead of a generic "something went wrong".
   function friendlyGithubError(err, cfg) {
     const msg = (err && err.message) || "";
+    logError("mapping error to message:", { message: msg, status: err && err.status, cfg: safeCfg(cfg) });
     if (msg === "timeout") return t("sync.error.timeout");
     if (msg === "network") return t("sync.error.network");
     if (/bad credentials/i.test(msg)) return t("sync.error.badtoken");
@@ -280,24 +310,35 @@
   }
 
   async function fetchCloudData(cfg) {
+    logInfo("fetchCloudData: starting", safeCfg(cfg));
     const headers = { Accept: "application/vnd.github+json" };
     if (cfg.token) headers.Authorization = `Bearer ${cfg.token}`;
     const url = githubApiUrl(cfg) + (cfg.branch ? `?ref=${encodeURIComponent(cfg.branch)}` : "");
     const res = await fetchWithTimeout(url, { headers });
-    if (res.status === 404) return { sha: null, data: null };
+    if (res.status === 404) {
+      logWarn("fetchCloudData: 404 — file or repo/branch not found (this is normal the very first time)");
+      return { sha: null, data: null };
+    }
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch((e) => { logError("fetchCloudData: couldn't parse error body", e); return {}; });
+      logError("fetchCloudData: GitHub returned an error", { status: res.status, body });
       const err = new Error(body.message || `github-fetch-${res.status}`);
       err.status = res.status;
       throw err;
     }
     const json = await res.json();
     const decoded = b64DecodeUnicode(json.content);
-    return { sha: json.sha, data: JSON.parse(decoded) };
+    const data = JSON.parse(decoded);
+    logInfo("fetchCloudData: success", { sha: json.sha, users: data.users && data.users.length, updatedAt: data.updatedAt });
+    return { sha: json.sha, data };
   }
 
   async function pushCloudData(cfg, data, sha) {
-    if (!cfg.token) throw new Error("no-token");
+    logInfo("pushCloudData: starting", { ...safeCfg(cfg), sha, users: data.users && data.users.length });
+    if (!cfg.token) {
+      logError("pushCloudData: no token configured, aborting");
+      throw new Error("no-token");
+    }
     const headers = {
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
@@ -311,12 +352,14 @@
     if (sha) body.sha = sha;
     const res = await fetchWithTimeout(githubApiUrl(cfg), { method: "PUT", headers, body: JSON.stringify(body) });
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
+      const errJson = await res.json().catch((e) => { logError("pushCloudData: couldn't parse error body", e); return {}; });
+      logError("pushCloudData: GitHub rejected the write", { status: res.status, body: errJson });
       const err = new Error(errJson.message || `github-push-${res.status}`);
       err.status = res.status;
       throw err;
     }
     const json = await res.json();
+    logInfo("pushCloudData: success, new sha", json.content.sha);
     return json.content.sha;
   }
 
@@ -604,14 +647,19 @@
 
   function scheduleSync() {
     saveLocalData(state.data);
-    if (!state.github.config) return; // fully local mode, nothing to push
+    if (!state.github.config) {
+      logInfo("scheduleSync: no GitHub config set, staying local-only");
+      return;
+    }
+    logInfo("scheduleSync: queued a push in 1.2s");
     if (state.syncTimer) clearTimeout(state.syncTimer);
     state.syncTimer = setTimeout(pushNow, 1200);
   }
 
   async function pushNow() {
     const cfg = state.github.config;
-    if (!cfg) return;
+    if (!cfg) { logWarn("pushNow: called with no config, aborting"); return; }
+    logInfo("pushNow: starting", safeCfg(cfg));
     setSyncStatus("syncing");
     state.data.updatedAt = new Date().toISOString();
     try {
@@ -619,10 +667,13 @@
       state.github.sha = newSha;
       saveLocalData(state.data);
       setSyncStatus("synced");
+      logInfo("pushNow: done, status = synced");
     } catch (err) {
+      logError("pushNow: push failed", err);
       if (err && err.status === 409) {
         // Someone else pushed meanwhile: fetch the latest sha and retry once,
         // keeping our local edits (simple last-write-wins for a small group).
+        logWarn("pushNow: 409 conflict, refetching sha and retrying once");
         try {
           const fresh = await fetchCloudData(cfg);
           state.github.sha = fresh.sha;
@@ -630,8 +681,10 @@
           state.github.sha = newSha;
           saveLocalData(state.data);
           setSyncStatus("synced");
+          logInfo("pushNow: retry after conflict succeeded");
           return;
         } catch (err2) {
+          logError("pushNow: retry after conflict also failed", err2);
           setSyncStatus("error", friendlyGithubError(err2, cfg));
           return;
         }
@@ -642,18 +695,22 @@
 
   async function pullNow(initial) {
     const cfg = state.github.config;
-    if (!cfg) { setSyncStatus("off"); return; }
+    if (!cfg) { logInfo("pullNow: no config, status = off"); setSyncStatus("off"); return; }
+    logInfo(`pullNow(initial=${!!initial}): starting`, safeCfg(cfg));
     setSyncStatus("syncing");
     try {
       const result = await fetchCloudData(cfg);
       if (result.data === null) {
         // File doesn't exist yet in the repo: create it from what we have locally.
+        logInfo("pullNow: club-data.json doesn't exist yet in the repo, creating it now");
         const newSha = await pushCloudData(cfg, state.data, null);
         state.github.sha = newSha;
         setSyncStatus("synced");
+        logInfo("pullNow: initial file created, status = synced");
         return;
       }
       if (result.sha !== state.github.sha) {
+        logInfo("pullNow: cloud sha differs from what we had, applying cloud data", { oldSha: state.github.sha, newSha: result.sha });
         state.data = result.data;
         state.github.sha = result.sha;
         saveLocalData(state.data);
@@ -664,9 +721,11 @@
         state.github.errorMsg = null;
         renderAll();
       } else {
+        logInfo("pullNow: cloud sha unchanged, nothing to apply");
         setSyncStatus("synced");
       }
     } catch (err) {
+      logError("pullNow: failed", err);
       setSyncStatus("error", friendlyGithubError(err, cfg));
     }
   }
@@ -868,6 +927,7 @@
 
   el.syncForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    logInfo("sync form submitted");
     el.syncError.hidden = true;
     el.syncSuccess.hidden = true;
 
@@ -875,7 +935,15 @@
     const token = el.syncToken.value.trim();
     const branch = el.syncBranch.value.trim() || "main";
 
+    logInfo("sync form parsed input", {
+      rawRepo: el.syncRepo.value,
+      parsed,
+      branch,
+      tokenLength: token.length,
+    });
+
     if (!parsed || !token) {
+      logWarn("sync form validation failed: missing repo/owner split or token");
       el.syncError.textContent = t("sync.error.fields");
       el.syncError.hidden = false;
       return;
@@ -887,11 +955,14 @@
 
     try {
       setSyncStatus("syncing");
+      logInfo("sync form: fetching current cloud data", safeCfg(cfg));
       const result = await fetchCloudData(cfg);
       if (result.data === null) {
+        logInfo("sync form: club-data.json missing, creating it from local data");
         const newSha = await pushCloudData(cfg, state.data, null);
         state.github.sha = newSha;
       } else {
+        logInfo("sync form: club-data.json found, adopting cloud data as source of truth");
         state.data = result.data;
         state.github.sha = result.sha;
         saveLocalData(state.data);
@@ -903,11 +974,13 @@
       state.github.config = cfg;
       saveGithubConfig(cfg);
       setSyncStatus("synced");
+      logInfo("sync form: success, config saved", safeCfg(cfg));
       el.syncSuccess.hidden = false;
       el.syncDisconnect.hidden = false;
       renderAll();
       setTimeout(closeSyncModal, 900);
     } catch (err) {
+      logError("sync form: setup failed, reverting to local-only", err);
       state.github.config = null;
       clearGithubConfig();
       setSyncStatus("off");
@@ -919,6 +992,7 @@
   });
 
   el.syncDisconnect.addEventListener("click", () => {
+    logInfo("sync disconnected by user");
     clearGithubConfig();
     state.github.config = null;
     state.github.sha = null;
@@ -928,12 +1002,14 @@
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && state.github.config && state.github.status !== "syncing") {
+      logInfo("tab became visible, pulling latest cloud data");
       pullNow(false);
     }
   });
 
   /* ---------------- boot ---------------- */
   function init() {
+    logInfo("init: booting", { githubConfigured: !!state.github.config, users: state.data.users.map((u) => u.id) });
     applyI18n();
 
     // Always show the app straight away from the local cache — a slow or
@@ -954,7 +1030,10 @@
     // Sync with GitHub in the background, if configured; renders again
     // on its own once (if) it resolves.
     if (state.github.config) {
+      logInfo("init: GitHub config found in localStorage, pulling in background", safeCfg(state.github.config));
       pullNow(true);
+    } else {
+      logInfo("init: no GitHub config, running local-only");
     }
   }
 
