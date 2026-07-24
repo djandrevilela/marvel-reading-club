@@ -5,17 +5,6 @@ partilhada dos 4 Omnibus + Secret Wars. Pensada para ser publicada no
 **GitHub Pages** só com o `index.html` na raiz — não precisa de servidor,
 Node, nem build step.
 
-## Como publicar no GitHub Pages
-
-1. Cria um repositório novo (ex: `marvel-reading-club`) e faz upload destes
-   4 ficheiros para a raiz: `index.html`, `styles.css`, `app.js`, `data.js`.
-2. No repositório: **Settings → Pages → Build and deployment → Source:
-   Deploy from a branch**, escolhe o branch `main` e a pasta `/ (root)`.
-3. Guarda. Ao fim de 1-2 minutos a app fica disponível em
-   `https://<o-teu-user>.github.io/<nome-do-repo>/`.
-
-Não há passos extra: é literalmente "git push" + ativar o Pages.
-
 ## Como funciona a "base de dados"
 
 Não há servidor próprio — mas agora há duas camadas:
@@ -136,12 +125,6 @@ Se depois disto continuar a falhar, os motivos mais comuns são:
   entretanto.
 
 ## Passwords já definidas
-
-| Leitor  | Password   |
-|---------|------------|
-| André   | `andre123`  |
-| Filipe  | `filipe123` |
-| Duarte  | `duarte123` |
 
 São passwords **simples de propósito** (só para evitar que alguém marque
 capítulos de outra pessoa sem querer) — não é segurança "a sério", o hash
