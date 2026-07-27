@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-07-27T11:14:41.388Z",
+  "updatedAt": "2026-07-27T15:09:55.098Z",
   "users": [
     {
       "id": "andre",
@@ -23,7 +23,8 @@
       "books": {
         "1": true,
         "2": true,
-        "3": true
+        "3": true,
+        "4": true
       },
       "movies": {
         "1": true,
