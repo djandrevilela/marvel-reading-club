@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-08-14T16:07:48.106Z",
+  "updatedAt": "2026-08-17T07:46:33.538Z",
   "users": [
     {
       "id": "andre",
@@ -41,7 +41,10 @@
         "18": true,
         "19": true,
         "20": true,
-        "21": true
+        "21": true,
+        "22": true,
+        "23": true,
+        "24": true
       },
       "movies": {
         "1": true,
