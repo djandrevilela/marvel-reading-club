@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-09-02T14:31:03.910Z",
+  "updatedAt": "2026-09-03T20:35:15.605Z",
   "users": [
     {
       "id": "andre",
@@ -107,7 +107,8 @@
         "46": true,
         "47": true,
         "48": true,
-        "49": true
+        "49": true,
+        "50": true
       }
     },
     "filipe": {
